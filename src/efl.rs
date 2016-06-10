@@ -18,8 +18,16 @@
 #![crate_name="efl"]
 #![crate_type="lib"]
 
-#![feature(macro_rules)]
-#![feature(unsafe_destructor)]
+#[macro_use] extern crate enum_primitive;
+
+/* Project-wide Issues
+
+TODO CString pointers review.
+ Currently, as_ptr() is used. Should into_raw() and from_raw() be used in some places?
+
+TODO Replace int/uint with appropriate primitive: i32, i64, u32, u64, usize, isize
+
+*/
 
 pub mod eo;
 pub mod ecore;
@@ -32,3 +40,10 @@ pub mod eldbus;
 pub mod emotion;
 pub mod elementary;
 pub mod eseful;
+pub mod types {
+    // Define old int/uint types used by original Rust code
+    #[allow(non_camel_case_types)]
+    pub type int = isize;
+    #[allow(non_camel_case_types)]
+    pub type uint = usize;
+}

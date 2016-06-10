@@ -19,11 +19,13 @@
 extern crate libc;
 extern crate core;
 
-use eet::libc::{c_int, c_uint, c_char, c_void, free};
-use eet::core::num::FromPrimitive;
-use std::mem::transmute;
-use std::fmt::{Show, Formatter, Result};
+extern crate num;
+use eet::num::FromPrimitive;
 
+use types::{int, uint};
+use eet::libc::{c_int, c_uint, c_char, c_void, free};
+use std::ffi::CString;
+use std::mem::transmute;
 
 /// EetFile object.
 pub struct EetFile {
@@ -32,6 +34,7 @@ pub struct EetFile {
 
 /// EetValue object.
 /// This object is a convenient wrapper around values returned by 'read'.
+#[derive(Debug)]
 pub struct EetValue<T> {
     _value: *const T
 }
@@ -40,18 +43,18 @@ impl<T> EetValue<T> {
     pub fn get_val(&self) -> *const T { self._value }
 }
 
-#[unsafe_destructor]
 impl<T> Drop for EetValue<T> {
     fn drop(&mut self) {
         unsafe { free(transmute(self._value)) }
     }
 }
 
-impl<T: Show> Show for EetValue<T> {
-    fn fmt(&self, _fmt: &mut Formatter) -> Result {
-        unsafe { write!(_fmt, "{}", *((*self)._value)) }
-    }
-}
+// TODO EetValue Display or Debug impl needed? Or is derive(Debug) above fine?
+//impl<T: Debug> Debug for EetValue<T> {
+//    fn fmt(&self, _fmt: &mut Formatter) -> Result {
+//        unsafe { write!(_fmt, "{}", *((*self)._value)) }
+//    }
+//}
 
 /// Internal representation of an EetFile object.
 pub enum _EetFile {}
@@ -66,7 +69,8 @@ pub enum EetFileMode {
     EetFileModeReadWrite	
 }
 
-#[deriving(Show, FromPrimitive)]
+enum_from_primitive!{
+#[derive(Debug)]
 pub enum EetError {
     EetErrorNone,
     EetErrorBadObject,
@@ -87,6 +91,7 @@ pub enum EetError {
     EetErrorPrngNotSeeded,
     EetErrorEncryptFailed,
     EetErrorDecryptFailed
+}
 }
 
 #[link(name = "eet")]
@@ -114,36 +119,39 @@ pub fn clearcache() { unsafe { eet_clearcache() } }
 /// Open an eet file on disk, and returns a handle to it.
 pub fn open(file: &str, mode: EetFileMode) -> EetFile {
     let imode = mode as c_uint;
-    file.with_c_str(|c_file| unsafe {
-        EetFile { _eo: eet_open(c_file, imode) }
-    })
+    let c_file = CString::new(file).unwrap();
+    unsafe {
+        EetFile { _eo: eet_open(c_file.as_ptr(), imode) }
+    }
 }
 
 /// Read a specified entry from an eet file and return data.
 pub fn read<T>(ef: EetFile, name: &str, size_ret: &mut i32) -> EetValue<T> {
-    name.with_c_str(|c_name| unsafe {
+    let c_name = CString::new(name).unwrap();
+    unsafe {
         EetValue {
-            _value: transmute::<*const c_void,*const T>(eet_read(ef._eo, c_name, size_ret))
+            _value: transmute::<*const c_void,*const T>(eet_read(ef._eo, c_name.as_ptr(), size_ret))
         }
-    })
+    }
 }
 
 /// Write a specified entry to an eet file handle.
 pub fn write<T>(ef: EetFile, name: &str, data: &T,
                 size: uint, compress: int) -> int {
-    name.with_c_str(|c_name| unsafe {
-        eet_write(ef._eo, c_name, transmute(data), size as c_uint, compress as c_int) as int
-    })
+    let c_name = CString::new(name).unwrap();
+    unsafe {
+        eet_write(ef._eo, c_name.as_ptr(), transmute(data), size as c_uint, compress as c_int) as int
+    }
 }
 
 //// Close an eet file handle and flush pending writes.
 pub fn close(ef: EetFile) -> EetError {
-    let v: Option<EetError> = FromPrimitive::from_u32(unsafe { eet_close(ef._eo) });
+    let v: Option<EetError> = EetError::from_u32(unsafe { eet_close(ef._eo) });
     v.unwrap()
 }
 
 /// Sync content of an eet file handle, flushing pending writes.
 pub fn sync(ef: EetFile) -> EetError {
-    let v: Option<EetError> = FromPrimitive::from_u32(unsafe { eet_sync(ef._eo) });
+    let v: Option<EetError> = EetError::from_u32(unsafe { eet_sync(ef._eo) });
     v.unwrap()
 }
